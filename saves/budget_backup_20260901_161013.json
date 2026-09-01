@@ -1,0 +1,72 @@
+{
+  "exported_at": "2026-09-01T16:10:13.205565",
+  "monthly_data": [
+    {
+      "month": "August",
+      "year": 2026,
+      "income_items": [
+        {
+          "id": "eafcd837a2694696ba9bd4d98a6809f5",
+          "name": "Internship",
+          "amount": 750000.0
+        },
+        {
+          "id": "97cbc3982ddb4e548c72317227606a58",
+          "name": "Dad",
+          "amount": 600000.0
+        },
+        {
+          "id": "98ca25d4e09e4f619158b30cb6496cc9",
+          "name": "Mom",
+          "amount": 260000.0
+        }
+      ],
+      "expense_items": [
+        {
+          "id": "eed7e3e2073347a8ac1d607f112173fb",
+          "name": "Gas",
+          "amount": 100000.0
+        },
+        {
+          "id": "59880546fe994de695ea9a43121b5b4e",
+          "name": "Procreate Loan",
+          "amount": 69000.0
+        },
+        {
+          "id": "d778c9eb79eb482ebad6437bf1d094c7",
+          "name": "Nintendo Switch Loan",
+          "amount": 323000.0
+        },
+        {
+          "id": "9b5e0cb7a3534a2ebb95efba88df2cd4",
+          "name": "Finish Procreate Loan",
+          "amount": 140000.0
+        },
+        {
+          "id": "7bbd4bd26c4443a5a0f7b285ebd8266e",
+          "name": "Unknown",
+          "amount": 181590.0
+        }
+      ]
+    },
+    {
+      "month": "January",
+      "year": 2026,
+      "income_items": [],
+      "expense_items": []
+    },
+    {
+      "month": "July",
+      "year": 2026,
+      "income_items": [],
+      "expense_items": []
+    },
+    {
+      "month": "September",
+      "year": 2026,
+      "income_items": [],
+      "expense_items": []
+    }
+  ],
+  "goals": []
+}
