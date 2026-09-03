@@ -1281,8 +1281,9 @@ if page == "Overview":
 
 elif page == "Monthly":
     st.subheader(f"Monthly Summary - {st.session_state.current_month} {st.session_state.current_year}")
+    all_daily_transactions = list_daily_transactions()
     monthly_daily_transactions = [
-        transaction for transaction in list_daily_transactions()
+        transaction for transaction in all_daily_transactions
         if datetime.fromisoformat(transaction["date"]).month == MONTH_INDEX[st.session_state.current_month] + 1
         and datetime.fromisoformat(transaction["date"]).year == st.session_state.current_year
     ]
@@ -1296,10 +1297,15 @@ elif page == "Monthly":
     ]
     monthly_income_total = sum(item["amount"] for item in monthly_income_items)
     monthly_expense_total = sum(item["amount"] for item in monthly_expense_items)
+    all_months_income_total, all_months_expense_total, _ = calculate_daily_transaction_totals(all_daily_transactions)
     monthly_summary_col1, monthly_summary_col2, monthly_summary_col3 = st.columns(3)
-    monthly_summary_col1.metric("Monthly income", format_idr(monthly_income_total))
-    monthly_summary_col2.metric("Monthly expenses", format_idr(monthly_expense_total))
+    monthly_summary_col1.metric("Total income (selected month)", format_idr(monthly_income_total))
+    monthly_summary_col2.metric("Total expenses (selected month)", format_idr(monthly_expense_total))
     monthly_summary_col3.metric("Monthly balance", format_idr(monthly_income_total - monthly_expense_total))
+
+    monthly_total_col1, monthly_total_col2 = st.columns(2)
+    monthly_total_col1.metric("Total income (all months)", format_idr(all_months_income_total))
+    monthly_total_col2.metric("Total expenses (all months)", format_idr(all_months_expense_total))
 
     st.markdown("---")
     monthly_chart_col1, monthly_chart_col2 = st.columns(2)
@@ -1357,10 +1363,15 @@ elif page == "Daily":
     ]
     selected_daily_income = sum(transaction["income"] for transaction in selected_daily_transactions)
     selected_daily_expenses = sum(transaction["expenses"] for transaction in selected_daily_transactions)
+    all_days_income_total, all_days_expense_total, _ = calculate_daily_transaction_totals(daily_transactions)
     daily_summary_col1, daily_summary_col2, daily_summary_col3 = st.columns(3)
-    daily_summary_col1.metric("Daily income", format_idr(selected_daily_income))
-    daily_summary_col2.metric("Daily expenses", format_idr(selected_daily_expenses))
-    daily_summary_col3.metric("Daily total", format_idr(selected_daily_income - selected_daily_expenses))
+    daily_summary_col1.metric("Total income (selected day)", format_idr(selected_daily_income))
+    daily_summary_col2.metric("Total expenses (selected day)", format_idr(selected_daily_expenses))
+    daily_summary_col3.metric("Net total (selected day)", format_idr(selected_daily_income - selected_daily_expenses))
+
+    daily_total_col1, daily_total_col2 = st.columns(2)
+    daily_total_col1.metric("Total income (all days)", format_idr(all_days_income_total))
+    daily_total_col2.metric("Total expenses (all days)", format_idr(all_days_expense_total))
 
     st.markdown("---")
     render_category_breakdown_charts(selected_daily_transactions, "Daily")
