@@ -863,8 +863,8 @@ with st.container():
     if backups:
         st.markdown("**Download**")
         backup_choice = st.selectbox("Backup file", backups, key="backup_choice")
+        filepath = os.path.join(SAVES_FOLDER, backup_choice)
         if st.button("Download JSON", width="stretch"):
-            filepath = os.path.join(SAVES_FOLDER, backup_choice)
             with open(filepath, "rb") as f:
                 st.download_button(
                     label=" Download",
@@ -873,6 +873,18 @@ with st.container():
                     mime="application/json",
                     width="stretch",
                 )
+        if st.button("Delete selected backup", width="stretch"):
+            active_data_file = os.path.abspath(DATA_FILE)
+            selected_file = os.path.abspath(filepath)
+            if selected_file == active_data_file:
+                st.error("Cannot delete the active data file (budgetware_data.json).")
+            else:
+                try:
+                    os.remove(filepath)
+                    st.success(f"Deleted {backup_choice}")
+                    st.rerun()
+                except OSError as exc:
+                    st.error(f"Failed to delete file: {exc}")
 
 st.markdown("---")
 
