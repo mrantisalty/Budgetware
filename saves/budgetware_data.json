@@ -1,0 +1,171 @@
+{
+  "monthly_data": [
+    {
+      "month": "September",
+      "year": 2026,
+      "income_items": [],
+      "expense_items": []
+    },
+    {
+      "month": "August",
+      "year": 2026,
+      "income_items": [],
+      "expense_items": []
+    }
+  ],
+  "daily_transactions": [
+    {
+      "id": "b10bdfc3aa714cbb901b27a4dc5b3724",
+      "date": "2026-08-31",
+      "name": "Gas",
+      "balance_type": "Cash balance",
+      "income": 0.0,
+      "expenses": 100000.0
+    },
+    {
+      "id": "61b64640be024e32ab089f6b27a009c6",
+      "date": "2026-08-31",
+      "name": "Nintendo Switch Loan",
+      "balance_type": "Account balance",
+      "income": 0.0,
+      "expenses": 323000.0
+    },
+    {
+      "id": "8fc91b2995de4f2f84a306ffbcb572bc",
+      "date": "2026-08-31",
+      "name": "unknownpurchases",
+      "balance_type": "Account balance",
+      "income": 0.0,
+      "expenses": 181590.0
+    },
+    {
+      "id": "2a8d262a937a409ab3e9761d4923fa18",
+      "date": "2026-09-01",
+      "name": "Gas",
+      "balance_type": "Cash balance",
+      "income": 0.0,
+      "expenses": 50000.0
+    },
+    {
+      "id": "250c6a2cb7f048ebb9a42449b211f537",
+      "date": "2026-08-30",
+      "name": "Internship",
+      "balance_type": "Account balance",
+      "income": 750000.0,
+      "expenses": 0.0
+    },
+    {
+      "id": "748ec8544f8048d8a4fef3c881547960",
+      "date": "2026-09-01",
+      "name": "Recounting1",
+      "balance_type": "Account balance",
+      "income": 54000.0,
+      "expenses": 0.0
+    },
+    {
+      "id": "5292578a4463447785651efebd4e1417",
+      "date": "2026-09-01",
+      "name": "Walletrecount1",
+      "balance_type": "Cash balance",
+      "income": 172000.0,
+      "expenses": 0.0
+    },
+    {
+      "id": "992bebd0e0ae4685b763524e0c4a418f",
+      "date": "2026-09-01",
+      "name": "Glue",
+      "balance_type": "Cash balance",
+      "category": "Needs",
+      "income": 0.0,
+      "expenses": 14000.0
+    },
+    {
+      "id": "f3c5d1531a144343ac1b9e3a867c06aa",
+      "date": "2026-09-01",
+      "name": "Indomaret",
+      "balance_type": "Account balance",
+      "category": "Wants",
+      "income": 0.0,
+      "expenses": 14600.0
+    },
+    {
+      "id": "dc96ebb6db444941a823c15f895d33eb",
+      "date": "2026-09-03",
+      "name": "Warung",
+      "balance_type": "Account balance",
+      "category": "Wants",
+      "income": 0.0,
+      "expenses": 11500.0
+    },
+    {
+      "id": "f6bbb9e6ba794eaea8234f58279b194f",
+      "date": "2026-08-31",
+      "name": "Procreate Loan",
+      "balance_type": "Account balance",
+      "category": "Wants",
+      "income": 0.0,
+      "expenses": 69000.0
+    },
+    {
+      "id": "a1be2aa6554f40aa846f4b940a04051c",
+      "date": "2026-08-31",
+      "name": "Finish Procreate Loan",
+      "balance_type": "Account balance",
+      "category": "Wants",
+      "income": 0.0,
+      "expenses": 140000.0
+    },
+    {
+      "id": "5fccbfe072fc4345bb13105cb5ff18e9",
+      "date": "2026-08-30",
+      "name": "Dad",
+      "balance_type": "Account balance",
+      "category": "Side salary",
+      "income": 600000.0,
+      "expenses": 0.0
+    },
+    {
+      "id": "3c5ce3ad01134b81943baeb79bdb57a0",
+      "date": "2026-08-30",
+      "name": "Mom",
+      "balance_type": "Account balance",
+      "category": "Side salary",
+      "income": 260000.0,
+      "expenses": 0.0
+    }
+  ],
+  "goals": [
+    {
+      "name": "Ipad Air M3 + Apple Pencil Pro",
+      "category_name": "Ipad + Pencil",
+      "target_amount": 14000000.0,
+      "deadline": "2027-09-03",
+      "current_savings": 0.0,
+      "balance": 0.0,
+      "monthly_savings": 0.0,
+      "monthly_savings_history": []
+    }
+  ],
+  "profile_balances": {
+    "cash_balance": 172000.0,
+    "account_balance": 760310.56
+  },
+  "recurring_savings": [
+    {
+      "id": "6c767d50e77d46d6a494efc3e55a98e9",
+      "name": "IpadAugust",
+      "category": "Ipad + Pencil",
+      "amount": 250000.0,
+      "start_month": "August",
+      "start_year": 2026
+    },
+    {
+      "id": "0a6d6e21e0c24050a450dfca1ad637d7",
+      "name": "IpadSeptember",
+      "category": "Ipad + Pencil",
+      "amount": 250000.0,
+      "start_month": "September",
+      "start_year": 2026
+    }
+  ]
+}

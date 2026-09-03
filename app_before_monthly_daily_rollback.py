@@ -5,7 +5,6 @@ import sqlite3
 import tempfile
 import uuid
 from calendar import monthrange
-from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -102,27 +101,7 @@ html, body, #root { background: var(--bg) !important; color: var(--ink); }
 [data-testid="stTextInput"] input, [data-testid="stNumberInput"] input, [data-testid="stSelectbox"] [role="combobox"], [data-baseweb="select"] > div { color: var(--ink); background: var(--surface-raised); border-color: var(--line); }
 [data-testid="stNumberInput"] button, .modebar { display: none; }
 [data-testid="stForm"], [data-testid="stMetric"] { background: var(--surface); border: 1px solid var(--line); border-radius: 0.8rem; padding: 1rem; }
-[data-testid="stMetric"] {
-    width: 100%;
-    min-width: 0;
-    overflow: hidden;
-    box-sizing: border-box;
-}
-[data-testid="stMetricValue"] {
-    color: white;
-    white-space: normal !important;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-    line-height: 1.2;
-    max-width: 100%;
-    font-size: clamp(1.2rem, 2vw, 2.1rem);
-}
-[data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {
-    white-space: normal !important;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-    max-width: 100%;
-}
+[data-testid="stMetricValue"] { color: white; }
 [data-testid="stProgressBar"] > div > div > div { background: var(--red); }
 [data-testid="stAlert"] { background: var(--red-wash); border-color: var(--red-dark); }
 .utility-sidebar { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--red); border-radius: 0.8rem; padding: 0.5rem 1rem 1rem; animation: slide-down 360ms cubic-bezier(.2,.8,.2,1) both; }
@@ -150,21 +129,8 @@ html, body, #root { background: var(--bg) !important; color: var(--ink); }
 @media (max-width: 720px) {
     [data-testid="stAppViewContainer"] { padding-top: 8rem; }
     .navbar-brand { font-size: 1.1rem; }
-    [data-testid="stMetric"] { padding: 0.75rem; }
-    [data-testid="stMetricValue"] {
-        font-size: clamp(1.05rem, 4.2vw, 1.55rem);
-        line-height: 1.2;
-        letter-spacing: -0.02em;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.82rem;
-        white-space: normal !important;
-        overflow-wrap: anywhere;
-        word-break: break-word;
-    }
-    [data-testid="stMetricDelta"] { font-size: 0.78rem; }
+    [data-testid="stMetricValue"] { font-size: 1.2rem; line-height: 1.2; overflow-wrap: anywhere; }
+    [data-testid="stMetricLabel"] { white-space: normal; overflow-wrap: anywhere; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -174,12 +140,9 @@ MONTHS = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
 ]
-INCOME_CATEGORIES = ["Salary", "Gift", "Side salary"]
-EXPENSE_CATEGORIES = ["Necessity", "Wants", "Needs"]
 MONTH_INDEX = {name: idx for idx, name in enumerate(MONTHS)}
 DB_PATH = "budgetware_data.db"
 SAVES_FOLDER = "saves"
-DATA_FILE = os.path.join(SAVES_FOLDER, "budgetware_data.json")
 WIB = ZoneInfo("Asia/Jakarta")
 
 
@@ -188,11 +151,7 @@ def wib_now():
 
 
 def format_idr(amount):
-    try:
-        precise_amount = Decimal(str(amount or 0))
-    except (InvalidOperation, ValueError):
-        precise_amount = Decimal("0")
-    return f"IDR {precise_amount:,.2f}"
+    return f"IDR {float(amount or 0):,.0f}"
 
 
 def ensure_item_ids(items):
@@ -221,7 +180,6 @@ def normalize_goal(goal, fallback_monthly_savings=0.0):
 
     normalized = dict(goal)
     normalized["name"] = normalized.get("name") or "Goal"
-    normalized["category_name"] = normalized.get("category_name") or normalized["name"]
     normalized["target_amount"] = float(normalized.get("target_amount", 0) or 0)
     normalized["current_savings"] = float(normalized.get("current_savings", normalized.get("balance", 0)) or 0)
     normalized["balance"] = normalized["current_savings"]
@@ -245,7 +203,6 @@ def normalize_saving(saving):
     return {
         "id": saving.get("id") or uuid.uuid4().hex,
         "name": saving.get("name") or "Saving",
-        "category": saving.get("category") or "General",
         "amount": float(saving.get("amount", 0) or 0),
         "start_month": saving.get("start_month") or MONTHS[wib_now().month - 1],
         "start_year": int(saving.get("start_year", wib_now().year) or wib_now().year),
@@ -255,76 +212,14 @@ def normalize_saving(saving):
 def normalize_daily_transaction(transaction):
     if not isinstance(transaction, dict):
         transaction = {}
-    income_amount = float(transaction.get("income", 0) or 0)
-    expense_amount = float(transaction.get("expenses", 0) or 0)
-    category = transaction.get("category")
-    if not category:
-        if income_amount > 0:
-            category = INCOME_CATEGORIES[0]
-        elif expense_amount > 0:
-            category = EXPENSE_CATEGORIES[0]
-        else:
-            category = INCOME_CATEGORIES[0]
     return {
         "id": transaction.get("id") or uuid.uuid4().hex,
         "date": transaction.get("date") or wib_now().date().isoformat(),
         "name": transaction.get("name") or "Transaction",
         "balance_type": transaction.get("balance_type") or "Account balance",
-        "category": category,
-        "income": income_amount,
-        "expenses": expense_amount,
+        "income": float(transaction.get("income", 0) or 0),
+        "expenses": float(transaction.get("expenses", 0) or 0),
     }
-
-
-def empty_store():
-    return {
-        "monthly_data": [],
-        "daily_transactions": [],
-        "goals": [],
-        "profile_balances": {"cash_balance": 0.0, "account_balance": 0.0},
-        "recurring_savings": [],
-    }
-
-
-def load_store():
-    ensure_saves_folder()
-    if not os.path.exists(DATA_FILE):
-        return empty_store()
-    with open(DATA_FILE, "r", encoding="utf-8") as file:
-        store = empty_store()
-        store.update(json.load(file))
-        return store
-
-
-def save_store(store):
-    ensure_saves_folder()
-    with open(DATA_FILE, "w", encoding="utf-8") as file:
-        json.dump(store, file, indent=2)
-
-
-def migrate_database_to_store():
-    if os.path.exists(DATA_FILE):
-        return
-    store = empty_store()
-    conn = sqlite3.connect(DB_PATH)
-    monthly_rows = conn.execute("SELECT month, year, income_items, expense_items FROM monthly_data ORDER BY year, month").fetchall()
-    store["monthly_data"] = [
-        {"month": month, "year": year, "income_items": json.loads(income_items or "[]"), "expense_items": json.loads(expense_items or "[]")}
-        for month, year, income_items, expense_items in monthly_rows
-    ]
-    saving_rows = conn.execute("SELECT id, name, amount, start_month, start_year FROM recurring_savings ORDER BY name").fetchall()
-    store["recurring_savings"] = [normalize_saving({"id": row[0], "name": row[1], "amount": row[2], "start_month": row[3], "start_year": row[4]}) for row in saving_rows]
-    goal_row = conn.execute("SELECT data FROM goals WHERE id = 1").fetchone()
-    if goal_row:
-        store["goals"] = json.loads(goal_row[0] or "[]")
-    balance_row = conn.execute("SELECT cash_balance, account_balance FROM profile_balances WHERE id = 1").fetchone()
-    if balance_row:
-        store["profile_balances"] = {"cash_balance": balance_row[0], "account_balance": balance_row[1]}
-    daily_rows = conn.execute("SELECT id, transaction_date, name, balance_type, income, expenses FROM daily_transactions ORDER BY transaction_date, id").fetchall()
-    store["daily_transactions"] = [normalize_daily_transaction({"id": row[0], "date": row[1], "name": row[2], "balance_type": row[3], "income": row[4], "expenses": row[5]}) for row in daily_rows]
-    conn.close()
-    save_store(store)
-    os.remove(DB_PATH)
 
 
 def init_database():
@@ -389,32 +284,49 @@ def init_database():
 
 
 def save_monthly_data(month, year, income_items, expense_items):
-    store = load_store()
-    matching_record = next((record for record in store["monthly_data"] if record["month"] == month and int(record["year"]) == int(year)), None)
-    record = {"month": month, "year": int(year), "income_items": income_items, "expense_items": expense_items}
-    if matching_record:
-        matching_record.update(record)
-    else:
-        store["monthly_data"].append(record)
-    save_store(store)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO monthly_data (month, year, income_items, expense_items)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(month, year) DO UPDATE SET
+            income_items = excluded.income_items,
+            expense_items = excluded.expense_items,
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (month, year, json.dumps(income_items), json.dumps(expense_items)),
+    )
+    conn.commit()
+    conn.close()
 
 
 def save_goals(goals):
-    store = load_store()
     serialized_goals = []
     for goal in goals:
         goal_copy = dict(goal)
         if hasattr(goal_copy.get("deadline"), "isoformat"):
             goal_copy["deadline"] = goal_copy["deadline"].isoformat()
         serialized_goals.append(goal_copy)
-    store["goals"] = serialized_goals
-    save_store(store)
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO goals (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+        (json.dumps(serialized_goals),),
+    )
+    conn.commit()
+    conn.close()
 
 
 def load_goals():
-    store = load_store()
+    conn = sqlite3.connect(DB_PATH)
+    result = conn.execute("SELECT data FROM goals WHERE id = 1").fetchone()
+    conn.close()
+    if not result:
+        return []
+
     goals = []
-    for goal in store["goals"]:
+    for goal in json.loads(result[0]):
         goal_copy = dict(goal)
         if isinstance(goal_copy.get("deadline"), str):
             try:
@@ -426,35 +338,59 @@ def load_goals():
 
 
 def save_profile_balances(cash_balance, account_balance):
-    store = load_store()
-    store["profile_balances"] = {"cash_balance": float(cash_balance), "account_balance": float(account_balance)}
-    save_store(store)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO profile_balances (id, cash_balance, account_balance) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET cash_balance = excluded.cash_balance, account_balance = excluded.account_balance",
+        (float(cash_balance), float(account_balance)),
+    )
+    conn.commit()
+    conn.close()
 
 
 def load_profile_balances():
-    balances = load_store()["profile_balances"]
-    return (float(balances["cash_balance"]), float(balances["account_balance"]))
+    conn = sqlite3.connect(DB_PATH)
+    result = conn.execute("SELECT cash_balance, account_balance FROM profile_balances WHERE id = 1").fetchone()
+    conn.close()
+    return (float(result[0]), float(result[1])) if result else None
 
 
 def save_daily_transaction(transaction):
     normalized = normalize_daily_transaction(transaction)
-    store = load_store()
-    store["daily_transactions"] = [item for item in store["daily_transactions"] if item.get("id") != normalized["id"]]
-    store["daily_transactions"].append(normalized)
-    save_store(store)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO daily_transactions (id, transaction_date, name, balance_type, income, expenses)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            transaction_date = excluded.transaction_date,
+            name = excluded.name,
+            balance_type = excluded.balance_type,
+            income = excluded.income,
+            expenses = excluded.expenses
+        """,
+        (normalized["id"], normalized["date"], normalized["name"], normalized["balance_type"], normalized["income"], normalized["expenses"]),
+    )
+    conn.commit()
+    conn.close()
 
 
 def list_daily_transactions():
-    return sorted(
-        [normalize_daily_transaction(transaction) for transaction in load_store()["daily_transactions"]],
-        key=lambda transaction: (transaction["date"], transaction["id"]),
-    )
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, transaction_date, name, balance_type, income, expenses FROM daily_transactions ORDER BY transaction_date, id"
+    ).fetchall()
+    conn.close()
+    return [
+        normalize_daily_transaction({"id": row[0], "date": row[1], "name": row[2], "balance_type": row[3], "income": row[4], "expenses": row[5]})
+        for row in rows
+    ]
 
 
 def delete_daily_transaction(transaction_id):
-    store = load_store()
-    store["daily_transactions"] = [item for item in store["daily_transactions"] if item.get("id") != transaction_id]
-    save_store(store)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM daily_transactions WHERE id = ?", (transaction_id,))
+    conn.commit()
+    conn.close()
 
 
 def transfer_balance(from_balance, to_balance, amount):
@@ -486,35 +422,81 @@ def adjust_balance(balance_type, amount):
 
 
 def load_monthly_data(month, year):
-    record = next((record for record in load_store()["monthly_data"] if record["month"] == month and int(record["year"]) == int(year)), None)
-    if record:
-        return {"income_items": record.get("income_items", []), "expense_items": record.get("expense_items", [])}
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT income_items, expense_items FROM monthly_data WHERE month = ? AND year = ?",
+        (month, year),
+    )
+    result = cursor.fetchone()
+    conn.close()
+    if result:
+        return {
+            "income_items": json.loads(result[0]) if result[0] else [],
+            "expense_items": json.loads(result[1]) if result[1] else [],
+        }
     return {"income_items": [], "expense_items": []}
 
 
 def list_monthly_data():
-    return load_store()["monthly_data"]
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT month, year, income_items, expense_items FROM monthly_data ORDER BY year, month")
+    rows = cursor.fetchall()
+    conn.close()
+    collected = []
+    for month, year, income_items, expense_items in rows:
+        collected.append(
+            {
+                "month": month,
+                "year": year,
+                "income_items": json.loads(income_items) if income_items else [],
+                "expense_items": json.loads(expense_items) if expense_items else [],
+            }
+        )
+    return collected
 
 def list_recurring_savings():
-    return sorted([normalize_saving(saving) for saving in load_store()["recurring_savings"]], key=lambda saving: saving["name"])
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, amount, start_month, start_year FROM recurring_savings ORDER BY name")
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        normalize_saving({"id": row[0], "name": row[1], "amount": row[2], "start_month": row[3], "start_year": row[4]})
+        for row in rows
+    ]
 
 def save_recurring_saving(saving):
     normalized = normalize_saving(saving)
-    store = load_store()
-    store["recurring_savings"] = [saving for saving in store["recurring_savings"] if saving.get("id") != normalized["id"]]
-    store["recurring_savings"].append(normalized)
-    save_store(store)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO recurring_savings (id, name, amount, start_month, start_year)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            amount = excluded.amount,
+            start_month = excluded.start_month,
+            start_year = excluded.start_year
+        """,
+        (normalized["id"], normalized["name"], normalized["amount"], normalized["start_month"], normalized["start_year"]),
+    )
+    conn.commit()
+    conn.close()
 
 def delete_recurring_saving(saving_id):
-    store = load_store()
-    store["recurring_savings"] = [saving for saving in store["recurring_savings"] if saving.get("id") != saving_id]
-    save_store(store)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM recurring_savings WHERE id = ?", (saving_id,))
+    conn.commit()
+    conn.close()
 
 def saving_months_applied(saving, selected_month, selected_year):
-    return 1 if (
-        saving["start_month"] == selected_month
-        and int(saving["start_year"]) == int(selected_year)
-    ) else 0
+    start_key = month_sort_key(saving["start_month"], saving["start_year"])
+    selected_key = month_sort_key(selected_month, selected_year)
+    if start_key > selected_key:
+        return 0
+    return (int(selected_year) - saving["start_year"]) * 12 + MONTH_INDEX[selected_month] - MONTH_INDEX[saving["start_month"]] + 1
 
 def recurring_savings_total(selected_month, selected_year):
     return sum(
@@ -529,78 +511,6 @@ def calculate_month_totals(income_items, expense_items):
     expense_total = sum(float(item.get("amount", 0) or 0) for item in expense_items)
     net = income_total - expense_total
     return income_total, expense_total, net
-
-
-def calculate_daily_transaction_totals(transactions):
-    income_total = sum(float(transaction.get("income", 0) or 0) for transaction in transactions)
-    expense_total = sum(float(transaction.get("expenses", 0) or 0) for transaction in transactions)
-    net = income_total - expense_total
-    return income_total, expense_total, net
-
-
-def category_totals_from_transactions(transactions):
-    income_totals = {category: 0.0 for category in INCOME_CATEGORIES}
-    expense_totals = {category: 0.0 for category in EXPENSE_CATEGORIES}
-
-    for transaction in transactions or []:
-        if not isinstance(transaction, dict):
-            continue
-
-        income_amount = float(transaction.get("income", 0) or 0)
-        expense_amount = float(transaction.get("expenses", 0) or 0)
-        category = transaction.get("category")
-
-        if income_amount > 0:
-            income_category = category if category in INCOME_CATEGORIES else INCOME_CATEGORIES[0]
-            income_totals[income_category] += income_amount
-        if expense_amount > 0:
-            expense_category = category if category in EXPENSE_CATEGORIES else EXPENSE_CATEGORIES[0]
-            expense_totals[expense_category] += expense_amount
-
-    income_rows = [
-        {"Category": category, "Amount": amount}
-        for category, amount in income_totals.items()
-        if amount > 0
-    ]
-    expense_rows = [
-        {"Category": category, "Amount": amount}
-        for category, amount in expense_totals.items()
-        if amount > 0
-    ]
-    return income_rows, expense_rows
-
-
-def render_category_breakdown_charts(transactions, scope_label):
-    income_category_rows, expense_category_rows = category_totals_from_transactions(transactions)
-    category_chart_col1, category_chart_col2 = st.columns(2)
-    with category_chart_col1:
-        if income_category_rows:
-            income_category_df = pd.DataFrame(income_category_rows)
-            income_category_fig = px.pie(
-                income_category_df,
-                names="Category",
-                values="Amount",
-                hole=0.45,
-                title=f"{scope_label} income by category",
-            )
-            income_category_fig.update_layout(height=320, margin=dict(t=55, b=20, l=15, r=15))
-            st.plotly_chart(income_category_fig, width="stretch")
-        else:
-            st.info(f"No {scope_label.lower()} income categories yet.")
-    with category_chart_col2:
-        if expense_category_rows:
-            expense_category_df = pd.DataFrame(expense_category_rows)
-            expense_category_fig = px.pie(
-                expense_category_df,
-                names="Category",
-                values="Amount",
-                hole=0.45,
-                title=f"{scope_label} expenses by category",
-            )
-            expense_category_fig.update_layout(height=320, margin=dict(t=55, b=20, l=15, r=15))
-            st.plotly_chart(expense_category_fig, width="stretch")
-        else:
-            st.info(f"No {scope_label.lower()} expense categories yet.")
 
 
 def month_sort_key(month_name, year):
@@ -634,45 +544,6 @@ def get_profile_balance(selected_month, selected_year):
     return running_balance
 
 
-def build_daily_account_balance_history(transactions):
-    grouped = {}
-    for transaction in transactions or []:
-        if not isinstance(transaction, dict):
-            continue
-        transaction_date = transaction.get("date")
-        if not transaction_date:
-            continue
-        if (transaction.get("balance_type") or "Account balance") != "Account balance":
-            continue
-
-        bucket = grouped.setdefault(
-            transaction_date,
-            {"income": 0.0, "expenses": 0.0, "net": 0.0},
-        )
-        bucket["income"] += float(transaction.get("income", 0) or 0)
-        bucket["expenses"] += float(transaction.get("expenses", 0) or 0)
-        bucket["net"] += float(transaction.get("income", 0) or 0) - float(transaction.get("expenses", 0) or 0)
-
-    if not grouped:
-        return []
-
-    running_balance = 0.0
-    history = []
-    for day in sorted(grouped):
-        day_data = grouped[day]
-        running_balance += day_data["net"]
-        history.append(
-            {
-                "date": day,
-                "income": round(day_data["income"], 2),
-                "expenses": round(day_data["expenses"], 2),
-                "net": round(day_data["net"], 2),
-                "balance": round(running_balance, 2),
-            }
-        )
-    return history
-
-
 def ensure_saves_folder():
     if not os.path.exists(SAVES_FOLDER):
         os.makedirs(SAVES_FOLDER)
@@ -680,26 +551,99 @@ def ensure_saves_folder():
 
 def export_data(filename=None):
     ensure_saves_folder()
-    store = load_store()
-    store["exported_at"] = wib_now().isoformat()
-    save_store(store)
-    if filename:
-        filepath = os.path.join(SAVES_FOLDER, filename)
-        with open(DATA_FILE, "r", encoding="utf-8") as source, open(filepath, "w", encoding="utf-8") as target:
-            target.write(source.read())
-        return filepath
-    return DATA_FILE
+    if file_name := filename:
+        filepath = os.path.join(SAVES_FOLDER, file_name)
+    else:
+        filepath = os.path.join(SAVES_FOLDER, f"budget_backup_{wib_now().strftime('%Y%m%d_%H%M%S')}.json")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT month, year, income_items, expense_items FROM monthly_data ORDER BY year, month")
+    rows = cursor.fetchall()
+    conn.close()
+
+    payload = {"exported_at": wib_now().isoformat(), "monthly_data": []}
+    for month, year, income_items, expense_items in rows:
+        payload["monthly_data"].append(
+            {
+                "month": month,
+                "year": year,
+                "income_items": json.loads(income_items) if income_items else [],
+                "expense_items": json.loads(expense_items) if expense_items else [],
+            }
+        )
+
+    if "goals" in st.session_state:
+        payload["goals"] = []
+        for goal in st.session_state.goals:
+            goal_copy = dict(goal)
+            if hasattr(goal_copy.get("deadline"), "isoformat"):
+                goal_copy["deadline"] = goal_copy["deadline"].isoformat()
+            payload["goals"].append(goal_copy)
+    payload["profile_balances"] = {
+        "cash_balance": st.session_state.get("cash_balance", 0.0),
+        "account_balance": st.session_state.get("account_balance", 0.0),
+    }
+    payload["daily_transactions"] = list_daily_transactions()
+    payload["recurring_savings"] = list_recurring_savings()
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+    return filepath
 
 
 def import_data(filepath):
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             payload = json.load(f)
-        store = empty_store()
-        store.update(payload)
-        save_store(store)
-        st.session_state.goals = load_goals()
-        st.session_state.cash_balance, st.session_state.account_balance = load_profile_balances()
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM monthly_data")
+        conn.commit()
+        conn.close()
+
+        for month_data in payload.get("monthly_data", []):
+            save_monthly_data(
+                month_data.get("month"),
+                month_data.get("year"),
+                month_data.get("income_items", []),
+                month_data.get("expense_items", []),
+            )
+
+        if "goals" in payload:
+            imported_goals = []
+            for goal in payload["goals"]:
+                goal_copy = dict(goal)
+                if isinstance(goal_copy.get("deadline"), str):
+                    try:
+                        goal_copy["deadline"] = datetime.fromisoformat(goal_copy["deadline"]).date()
+                    except ValueError:
+                        pass
+                imported_goals.append(normalize_goal(goal_copy))
+            st.session_state.goals = imported_goals
+            save_goals(st.session_state.goals)
+
+        if "profile_balances" in payload:
+            imported_balances = payload["profile_balances"]
+            st.session_state.cash_balance = float(imported_balances.get("cash_balance", 0) or 0)
+            st.session_state.account_balance = float(imported_balances.get("account_balance", 0) or 0)
+            save_profile_balances(st.session_state.cash_balance, st.session_state.account_balance)
+
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("DELETE FROM daily_transactions")
+        conn.commit()
+        conn.close()
+        for transaction in payload.get("daily_transactions", []):
+            save_daily_transaction(transaction)
+
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("DELETE FROM recurring_savings")
+        conn.commit()
+        conn.close()
+        for saving in payload.get("recurring_savings", []):
+            save_recurring_saving(saving)
 
         return True, "Data imported successfully."
     except Exception as exc:
@@ -707,7 +651,6 @@ def import_data(filepath):
 
 
 init_database()
-migrate_database_to_store()
 
 today = wib_now()
 if "current_month" not in st.session_state:
@@ -747,11 +690,11 @@ with st.container():
             if st.button("Overview", key="nav_overview", width="stretch"):
                 st.session_state.current_page = "Overview"
         with nav_col2:
-            if st.button("Daily", key="nav_daily", width="stretch"):
-                st.session_state.current_page = "Daily"
-        with nav_col3:
             if st.button("Monthly", key="nav_monthly", width="stretch"):
                 st.session_state.current_page = "Monthly"
+        with nav_col3:
+            if st.button("Daily", key="nav_daily", width="stretch"):
+                st.session_state.current_page = "Daily"
         with nav_col4:
             if st.button("Yearly", key="nav_yearly", width="stretch"):
                 st.session_state.current_page = "Yearly"
@@ -871,26 +814,13 @@ if "current_expense_items" not in st.session_state:
 st.session_state.current_income_items = ensure_item_ids(st.session_state.current_income_items)
 st.session_state.current_expense_items = ensure_item_ids(st.session_state.current_expense_items)
 
-selected_month_daily_transactions = [
-    transaction for transaction in list_daily_transactions()
-    if datetime.fromisoformat(transaction["date"]).month == MONTH_INDEX[st.session_state.current_month] + 1
-    and datetime.fromisoformat(transaction["date"]).year == st.session_state.current_year
-]
-monthly_income_from_items, monthly_expense_from_items, _ = calculate_month_totals(
+income_total, expense_total, monthly_balance = calculate_month_totals(
     st.session_state.current_income_items,
     st.session_state.current_expense_items,
 )
-monthly_income_from_daily, monthly_expense_from_daily, monthly_balance_from_daily = calculate_daily_transaction_totals(
-    selected_month_daily_transactions
-)
-income_total = monthly_income_from_items + monthly_income_from_daily
-expense_total = monthly_expense_from_items + monthly_expense_from_daily
-monthly_balance = (monthly_income_from_items + monthly_income_from_daily) - (monthly_expense_from_items + monthly_expense_from_daily)
 profile_balance = st.session_state.cash_balance + st.session_state.account_balance
-recurring_savings = list_recurring_savings()
-overall_savings = sum(saving["amount"] for saving in recurring_savings)
 monthly_savings_total = recurring_savings_total(st.session_state.current_month, st.session_state.current_year)
-safe_monthly_balance = profile_balance - overall_savings
+safe_monthly_balance = profile_balance - monthly_savings_total
 
 save_monthly_data(
     st.session_state.current_month,
@@ -904,189 +834,39 @@ page = st.session_state.current_page
 
 if page == "Overview":
     st.subheader("Overview")
-    daily_transactions = list_daily_transactions()
     overview_records = [
         record for record in list_monthly_data()
         if record["income_items"] or record["expense_items"]
     ]
-    seen_months = {(int(record["year"]), MONTH_INDEX[record["month"]]) for record in overview_records}
-    for transaction in daily_transactions:
-        if not transaction.get("income") and not transaction.get("expenses"):
-            continue
-        transaction_date = datetime.fromisoformat(transaction["date"])
-        month_name = MONTHS[transaction_date.month - 1]
-        month_key = (transaction_date.year, transaction_date.month - 1)
-        if month_key in seen_months:
-            match = next((record for record in overview_records if int(record["year"]) == transaction_date.year and record["month"] == month_name), None)
-            if match is None:
-                continue
-            if float(transaction.get("income", 0) or 0) > 0:
-                match.setdefault("income_items", []).append({
-                    "name": transaction["name"],
-                    "amount": float(transaction.get("income", 0) or 0),
-                    "balance_type": transaction.get("balance_type", "Account balance"),
-                })
-            if float(transaction.get("expenses", 0) or 0) > 0:
-                match.setdefault("expense_items", []).append({
-                    "name": transaction["name"],
-                    "amount": float(transaction.get("expenses", 0) or 0),
-                    "balance_type": transaction.get("balance_type", "Account balance"),
-                })
-            continue
-
-        new_record = {
-            "month": month_name,
-            "year": transaction_date.year,
-            "income_items": [],
-            "expense_items": [],
-        }
-        if float(transaction.get("income", 0) or 0) > 0:
-            new_record["income_items"].append({
-                "name": transaction["name"],
-                "amount": float(transaction.get("income", 0) or 0),
-                "balance_type": transaction.get("balance_type", "Account balance"),
-            })
-        if float(transaction.get("expenses", 0) or 0) > 0:
-            new_record["expense_items"].append({
-                "name": transaction["name"],
-                "amount": float(transaction.get("expenses", 0) or 0),
-                "balance_type": transaction.get("balance_type", "Account balance"),
-            })
-        if new_record["income_items"] or new_record["expense_items"]:
-            overview_records.append(new_record)
-            seen_months.add(month_key)
     overview_records.sort(key=lambda record: month_sort_key(record["month"], record["year"]))
-    monthly_summary = {}
-    for transaction in daily_transactions:
-        transaction_date = datetime.fromisoformat(transaction["date"])
-        month_key = (transaction_date.year, transaction_date.month)
-        summary = monthly_summary.setdefault(
-            month_key,
-            {"year": transaction_date.year, "month_index": transaction_date.month - 1, "Income": 0.0, "Expenses": 0.0},
-        )
-        summary["Income"] += transaction["income"]
-        summary["Expenses"] += transaction["expenses"]
+    all_time_income = sum(
+        calculate_month_totals(record["income_items"], record["expense_items"])[0]
+        for record in overview_records
+    )
+    all_time_expenses = sum(
+        calculate_month_totals(record["income_items"], record["expense_items"])[1]
+        for record in overview_records
+    )
 
-    daily_month_keys = set(monthly_summary)
-    for record in overview_records:
-        month_key = (int(record["year"]), MONTH_INDEX[record["month"]])
-        if month_key not in daily_month_keys:
-            record_income, record_expenses, _ = calculate_month_totals(record["income_items"], record["expense_items"])
-            monthly_summary[month_key] = {
-                "year": month_key[0],
-                "month_index": month_key[1],
-                "Income": record_income,
-                "Expenses": record_expenses,
-            }
-
-    monthly_summary_rows = []
-    running_balance = 0.0
-    for month_key in sorted(monthly_summary):
-        summary = monthly_summary[month_key]
-        running_balance += summary["Income"] - summary["Expenses"]
-        monthly_summary_rows.append(
-            {
-                "month_key": month_key,
-                "month": f"{MONTHS[summary['month_index']][:3]} {summary['year']}",
-                "year": summary["year"],
-                "Income": summary["Income"],
-                "Expenses": summary["Expenses"],
-                "Balance": running_balance,
-                "Daily income": summary["Income"] / monthrange(summary["year"], summary["month_index"] + 1)[1],
-                "Daily expenses": summary["Expenses"] / monthrange(summary["year"], summary["month_index"] + 1)[1],
-            }
-        )
-    monthly_summary_df = pd.DataFrame(monthly_summary_rows)
-    all_time_income = monthly_summary_df["Income"].sum() if not monthly_summary_df.empty else 0.0
-    all_time_expenses = monthly_summary_df["Expenses"].sum() if not monthly_summary_df.empty else 0.0
-
-    income_category_rows, expense_category_rows = category_totals_from_transactions(daily_transactions)
-
-    daily_balance_history = build_daily_account_balance_history(daily_transactions)
-    if daily_balance_history:
-        daily_balance_df = pd.DataFrame(daily_balance_history)
-        daily_balance_df["date"] = pd.to_datetime(daily_balance_df["date"])
-        daily_balance_fig = px.line(
-            daily_balance_df,
-            x="date",
-            y="balance",
-            markers=True,
-            title="Daily account balance history",
-            labels={"date": "Date", "balance": "Account balance (IDR)"},
-            color_discrete_sequence=["#ef3340"],
-        )
-        daily_balance_fig.update_xaxes(
-            tickformat="%b %d %Y",
-            showgrid=True,
-        )
-        daily_balance_fig.update_layout(
-            height=360,
-            showlegend=False,
-            margin=dict(t=55, b=35, l=45, r=20),
-            hovermode="x unified",
-        )
-        st.plotly_chart(daily_balance_fig, width="stretch")
-    else:
-        st.info("Add account-balance transactions to see the daily balance history chart.")
-
-    overview_row1_col1, overview_row1_col2, overview_row1_col3 = st.columns(3)
-    with overview_row1_col1:
-        st.metric("Current profile balance", format_idr(profile_balance))
-    with overview_row1_col2:
-        st.metric("Monthly income rate", format_idr(income_total))
-    with overview_row1_col3:
-        st.metric("Monthly expenses rate", format_idr(expense_total))
-
-    overview_row2_col1, overview_row2_col2, overview_row2_col3 = st.columns(3)
-    with overview_row2_col1:
-        st.metric("All-time income", format_idr(all_time_income))
-    with overview_row2_col2:
-        st.metric("All-time expenses", format_idr(all_time_expenses))
-    with overview_row2_col3:
-        st.metric("Safe to use this month", format_idr(safe_monthly_balance))
+    overview_metric_col1, overview_metric_col2, overview_metric_col3 = st.columns(3)
+    overview_metric_col4, overview_metric_col5 = st.columns(2)
+    overview_metric_col1.metric("Current profile balance", format_idr(profile_balance))
+    overview_metric_col2.metric("Monthly income rate", format_idr(income_total))
+    overview_metric_col3.metric("Monthly expenses rate", format_idr(expense_total))
+    overview_metric_col4.metric("All-time income", format_idr(all_time_income))
+    overview_metric_col5.metric("All-time expenses", format_idr(all_time_expenses))
 
     balance_col1, balance_col2, balance_col3 = st.columns(3)
     balance_col1.metric("Cash balance", format_idr(st.session_state.cash_balance))
     balance_col2.metric("Account balance", format_idr(st.session_state.account_balance))
     balance_col3.metric("Profile balance", format_idr(profile_balance))
-
-    category_chart_col1, category_chart_col2 = st.columns(2)
-    with category_chart_col1:
-        if income_category_rows:
-            income_category_df = pd.DataFrame(income_category_rows)
-            income_category_fig = px.pie(
-                income_category_df,
-                names="Category",
-                values="Amount",
-                hole=0.45,
-                title="Income by category",
-            )
-            income_category_fig.update_layout(height=320, margin=dict(t=55, b=20, l=15, r=15))
-            st.plotly_chart(income_category_fig, width="stretch")
-        else:
-            st.info("No income categories yet.")
-    with category_chart_col2:
-        if expense_category_rows:
-            expense_category_df = pd.DataFrame(expense_category_rows)
-            expense_category_fig = px.pie(
-                expense_category_df,
-                names="Category",
-                values="Amount",
-                hole=0.45,
-                title="Expenses by category",
-            )
-            expense_category_fig.update_layout(height=320, margin=dict(t=55, b=20, l=15, r=15))
-            st.plotly_chart(expense_category_fig, width="stretch")
-        else:
-            st.info("No expense categories yet.")
-
     with st.form("profile_balances_form"):
         st.markdown("**Update balances**")
         balance_input_col1, balance_input_col2 = st.columns(2)
         with balance_input_col1:
-            cash_balance_input = st.number_input("Cash balance (IDR)", min_value=0.0, value=float(st.session_state.cash_balance), step=0.01, format="%.2f")
+            cash_balance_input = st.number_input("Cash balance (IDR)", min_value=0.0, value=float(st.session_state.cash_balance), step=1000.0, format="%.0f")
         with balance_input_col2:
-            account_balance_input = st.number_input("Account balance (IDR)", min_value=0.0, value=float(st.session_state.account_balance), step=0.01, format="%.2f")
+            account_balance_input = st.number_input("Account balance (IDR)", min_value=0.0, value=float(st.session_state.account_balance), step=1000.0, format="%.0f")
         if st.form_submit_button("Save balances", width="stretch"):
             st.session_state.cash_balance = float(cash_balance_input)
             st.session_state.account_balance = float(account_balance_input)
@@ -1101,7 +881,7 @@ if page == "Overview":
         with transfer_col2:
             transfer_to = st.selectbox("To", ["Account balance", "Cash balance"])
         with transfer_col3:
-            transfer_amount = st.number_input("Amount (IDR)", min_value=0.0, step=0.01, format="%.2f")
+            transfer_amount = st.number_input("Amount (IDR)", min_value=0.0, step=1000.0, format="%.0f")
         if st.form_submit_button("Transfer", width="stretch"):
             transfer_success, transfer_message = transfer_balance(transfer_from, transfer_to, transfer_amount)
             if transfer_success:
@@ -1109,12 +889,29 @@ if page == "Overview":
             else:
                 st.error(transfer_message)
 
-    total_days = sum(monthrange(row["year"], row["month_key"][1] + 1)[1] for row in monthly_summary_rows)
+    total_days = sum(monthrange(int(record["year"]), MONTH_INDEX[record["month"]] + 1)[1] for record in overview_records)
     average_daily_income = all_time_income / total_days if total_days else 0.0
     average_daily_expenses = all_time_expenses / total_days if total_days else 0.0
     daily_metric_col1, daily_metric_col2 = st.columns(2)
     daily_metric_col1.metric("Average daily income", format_idr(average_daily_income))
     daily_metric_col2.metric("Average daily expenses", format_idr(average_daily_expenses))
+
+    monthly_summary = []
+    for record in overview_records:
+        record_income, record_expenses, _ = calculate_month_totals(record["income_items"], record["expense_items"])
+        days_in_month = monthrange(int(record["year"]), MONTH_INDEX[record["month"]] + 1)[1]
+        monthly_summary.append(
+            {
+                "month_key": month_sort_key(record["month"], record["year"]),
+                "month": f"{record['month'][:3]} {record['year']}",
+                "year": int(record["year"]),
+                "Income": record_income,
+                "Expenses": record_expenses,
+                "Daily income": record_income / days_in_month,
+                "Daily expenses": record_expenses / days_in_month,
+            }
+        )
+    monthly_summary_df = pd.DataFrame(monthly_summary)
 
     if not monthly_summary_df.empty:
         monthly_chart_col1, monthly_chart_col2 = st.columns(2)
@@ -1164,18 +961,6 @@ if page == "Overview":
             )
             daily_expenses_fig.update_layout(height=300, margin=dict(t=55, b=35, l=45, r=20))
             st.plotly_chart(daily_expenses_fig, width="stretch")
-
-        all_time_balance_fig = px.line(
-            monthly_summary_df,
-            x="month",
-            y="Balance",
-            markers=True,
-            title="All-time balance",
-            labels={"month": "Month", "Balance": "Cumulative balance (IDR)"},
-            color_discrete_sequence=["#ef3340"],
-        )
-        all_time_balance_fig.update_layout(height=300, showlegend=False, margin=dict(t=55, b=35, l=45, r=20))
-        st.plotly_chart(all_time_balance_fig, width="stretch")
 
         yearly_summary_df = monthly_summary_df.groupby("year", as_index=False)[["Income", "Expenses"]].sum()
         yearly_chart_col1, yearly_chart_col2 = st.columns(2)
@@ -1302,9 +1087,6 @@ elif page == "Monthly":
             st.info("No expenses added for this month.")
 
     st.markdown("---")
-    render_category_breakdown_charts(monthly_daily_transactions, "Monthly")
-
-    st.markdown("---")
     st.markdown("**Monthly entries**")
     monthly_income_table, monthly_expense_table = st.columns(2)
     with monthly_income_table:
@@ -1345,34 +1127,25 @@ elif page == "Daily":
     daily_summary_col2.metric("Daily expenses", format_idr(selected_daily_expenses))
     daily_summary_col3.metric("Daily total", format_idr(selected_daily_income - selected_daily_expenses))
 
-    st.markdown("---")
-    render_category_breakdown_charts(selected_daily_transactions, "Daily")
-
     with st.form("add_daily_transaction_form", clear_on_submit=True):
         st.markdown("**Add daily transaction**")
         daily_name = st.text_input("Name", placeholder="Salary, groceries, transport")
         daily_balance_type = st.selectbox("Account type", ["Account balance", "Cash balance"])
-        daily_entry_type = st.selectbox("Type", ["Income", "Expense"])
-        daily_category_options = INCOME_CATEGORIES if daily_entry_type == "Income" else EXPENSE_CATEGORIES
-        daily_category = st.selectbox("Category", daily_category_options)
-        daily_income = st.number_input("Income (IDR)", min_value=0.0, step=0.01, format="%.2f")
-        daily_expenses = st.number_input("Expenses (IDR)", min_value=0.0, step=0.01, format="%.2f")
+        daily_income = st.number_input("Income (IDR)", min_value=0.0, step=1000.0, format="%.0f")
+        daily_expenses = st.number_input("Expenses (IDR)", min_value=0.0, step=1000.0, format="%.0f")
         if st.form_submit_button("Add transaction", width="stretch"):
             if daily_name and (daily_income > 0 or daily_expenses > 0):
-                effective_income = daily_income if daily_entry_type == "Income" else 0.0
-                effective_expenses = daily_expenses if daily_entry_type == "Expense" else 0.0
                 transaction = normalize_daily_transaction(
                     {
                         "date": selected_daily_date.isoformat(),
                         "name": daily_name,
                         "balance_type": daily_balance_type,
-                        "category": daily_category,
-                        "income": effective_income,
-                        "expenses": effective_expenses,
+                        "income": daily_income,
+                        "expenses": daily_expenses,
                     }
                 )
                 save_daily_transaction(transaction)
-                adjust_balance(daily_balance_type, effective_income - effective_expenses)
+                adjust_balance(daily_balance_type, daily_income - daily_expenses)
                 save_profile_balances(st.session_state.cash_balance, st.session_state.account_balance)
                 st.rerun()
             else:
@@ -1384,58 +1157,13 @@ elif page == "Daily":
         daily_history_table = pd.DataFrame(daily_transactions)
         daily_history_table["total"] = daily_history_table["income"] - daily_history_table["expenses"]
         st.dataframe(
-            daily_history_table[["date", "name", "category", "balance_type", "income", "expenses", "total"]].rename(
-                columns={
-                    "date": "Date",
-                    "name": "Name",
-                    "category": "Category",
-                    "balance_type": "Account type",
-                    "income": "Income",
-                    "expenses": "Expenses",
-                    "total": "Total",
-                }
+            daily_history_table[["date", "name", "balance_type", "income", "expenses", "total"]].rename(
+                columns={"date": "Date", "name": "Name", "balance_type": "Account type", "income": "Income", "expenses": "Expenses", "total": "Total"}
             ),
             hide_index=True,
             height=360,
             width="stretch",
         )
-
-        edit_daily_choice = st.selectbox(
-            "Edit transaction",
-            options=[transaction["id"] for transaction in daily_transactions],
-            format_func=lambda transaction_id: next(
-                f"{transaction['date']} - {transaction['name']} ({transaction.get('category', 'Uncategorized')})"
-                for transaction in daily_transactions if transaction["id"] == transaction_id
-            ),
-        )
-        selected_daily_edit = next(transaction for transaction in daily_transactions if transaction["id"] == edit_daily_choice)
-        with st.form("edit_daily_transaction_form", clear_on_submit=True):
-            edit_date = st.date_input("Date", value=datetime.fromisoformat(selected_daily_edit["date"]).date())
-            edit_name = st.text_input("Name", value=selected_daily_edit["name"])
-            edit_balance_type = st.selectbox("Account type", ["Account balance", "Cash balance"], index=["Account balance", "Cash balance"].index(selected_daily_edit.get("balance_type", "Account balance")))
-            edit_entry_type = st.selectbox("Type", ["Income", "Expense"], index=0 if selected_daily_edit["income"] > 0 else 1)
-            edit_category_options = INCOME_CATEGORIES if edit_entry_type == "Income" else EXPENSE_CATEGORIES
-            edit_category = st.selectbox("Category", edit_category_options, index=edit_category_options.index(selected_daily_edit.get("category", edit_category_options[0])))
-            edit_income = st.number_input("Income (IDR)", min_value=0.0, value=float(selected_daily_edit["income"]), step=0.01, format="%.2f")
-            edit_expenses = st.number_input("Expenses (IDR)", min_value=0.0, value=float(selected_daily_edit["expenses"]), step=0.01, format="%.2f")
-            if st.form_submit_button("Save changes", width="stretch"):
-                updated = normalize_daily_transaction(
-                    {
-                        "id": selected_daily_edit["id"],
-                        "date": edit_date.isoformat(),
-                        "name": edit_name,
-                        "balance_type": edit_balance_type,
-                        "category": edit_category,
-                        "income": edit_income if edit_entry_type == "Income" else 0.0,
-                        "expenses": edit_expenses if edit_entry_type == "Expense" else 0.0,
-                    }
-                )
-                adjust_balance(selected_daily_edit["balance_type"], selected_daily_edit["expenses"] - selected_daily_edit["income"])
-                save_daily_transaction(updated)
-                adjust_balance(edit_balance_type, updated["income"] - updated["expenses"])
-                save_profile_balances(st.session_state.cash_balance, st.session_state.account_balance)
-                st.rerun()
-
         daily_delete_choice = st.selectbox(
             "Delete transaction",
             options=[transaction["id"] for transaction in daily_transactions],
@@ -1464,7 +1192,7 @@ elif page == "Legacy Monthly":
 
         with st.form("income_form", clear_on_submit=True):
             income_name = st.text_input("Income name", placeholder="Salary, Freelance, Bonus")
-            income_amount = st.number_input("Amount (IDR)", min_value=0.0, step=0.01, format="%.2f")
+            income_amount = st.number_input("Amount (IDR)", min_value=0, step=1000, format="%d")
             income_balance_type = st.selectbox("Add to", ["Account balance", "Cash balance"], key="income_balance_type")
             if st.form_submit_button("Add income", use_container_width=True):
                 if income_name and income_amount > 0:
@@ -1513,7 +1241,7 @@ elif page == "Legacy Monthly":
 
         with st.form("expense_form", clear_on_submit=True):
             expense_name = st.text_input("Expense name", placeholder="Rent, Groceries, Bills")
-            expense_amount = st.number_input("Amount (IDR)", min_value=0.0, step=0.01, format="%.2f", key="expense_amount_input")
+            expense_amount = st.number_input("Amount (IDR)", min_value=0, step=1000, format="%d", key="expense_amount_input")
             expense_balance_type = st.selectbox("Take from", ["Account balance", "Cash balance"], key="expense_balance_type")
             if st.form_submit_button("Add expense", use_container_width=True):
                 if expense_name and expense_amount > 0:
@@ -1581,47 +1309,18 @@ elif page == "Legacy Monthly":
 
 elif page == "Yearly":
     st.subheader(f"Yearly Summary - {st.session_state.current_year}")
-    yearly_daily_transactions = [
-        transaction for transaction in list_daily_transactions()
-        if datetime.fromisoformat(transaction["date"]).year == st.session_state.current_year
-    ]
-    if yearly_daily_transactions:
-        yearly_income = sum(transaction["income"] for transaction in yearly_daily_transactions)
-        yearly_expenses = sum(transaction["expenses"] for transaction in yearly_daily_transactions)
-    else:
-        yearly_records = [
-            record for record in list_monthly_data()
-            if int(record["year"]) == st.session_state.current_year
-        ]
-        yearly_income = sum(
-            calculate_month_totals(record["income_items"], record["expense_items"])[0]
-            for record in yearly_records
-        )
-        yearly_expenses = sum(
-            calculate_month_totals(record["income_items"], record["expense_items"])[1]
-            for record in yearly_records
-        )
-    yearly_balance = yearly_income - yearly_expenses
+    yearly_balance = profile_balance * 12
     y1, y2, y3 = st.columns(3)
-    y1.metric("Yearly Income", format_idr(yearly_income))
-    y2.metric("Yearly Expenses", format_idr(yearly_expenses))
+    y1.metric("Yearly Income", format_idr(income_total * 12))
+    y2.metric("Yearly Expenses", format_idr(expense_total * 12))
     y3.metric("Yearly Balance", format_idr(yearly_balance))
 
     st.markdown("---")
-    render_category_breakdown_charts(yearly_daily_transactions, "Yearly")
-
-    st.markdown("---")
-    if yearly_daily_transactions:
+    if st.session_state.current_expense_items:
         yearly_df = pd.DataFrame({
-            "Category": [transaction["name"] for transaction in yearly_daily_transactions if transaction["expenses"] > 0],
-            "Amount": [transaction["expenses"] for transaction in yearly_daily_transactions if transaction["expenses"] > 0],
+            "Category": [item["name"] for item in st.session_state.current_expense_items],
+            "Amount": [item["amount"] * 12 for item in st.session_state.current_expense_items],
         })
-    else:
-        yearly_df = pd.DataFrame({
-            "Category": [item["name"] for record in yearly_records for item in record["expense_items"]],
-            "Amount": [item["amount"] for record in yearly_records for item in record["expense_items"]],
-        })
-    if not yearly_df.empty:
         fig = px.pie(yearly_df, names="Category", values="Amount", hole=0.5)
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -1645,16 +1344,12 @@ elif page == "Lifetime":
     fig = px.line(lifetime_df, x="Year", y="Accumulated Balance", markers=True)
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("---")
-    lifetime_daily_transactions = list_daily_transactions()
-    render_category_breakdown_charts(lifetime_daily_transactions, "Lifetime")
-
 elif page == "Savings Goals":
     st.subheader("Savings Goals")
     with st.form("add_goal_form", clear_on_submit=True):
         goal_name = st.text_input("Goal name", placeholder="Vacation, Emergency Fund, Car")
-        goal_category = st.text_input("Category name", placeholder="Vacation, Emergency fund, Sports")
-        goal_target = st.number_input("Target amount (IDR)", min_value=0.0, step=0.01, format="%.2f")
+        goal_target = st.number_input("Target amount (IDR)", min_value=0, step=1000, format="%d")
+        goal_saved = st.number_input("Current saved amount (IDR)", min_value=0, step=1000, format="%d")
         goal_deadline = st.date_input("Target deadline", value=wib_now().date() + timedelta(days=365))
         if st.form_submit_button("Add goal", use_container_width=True):
             if goal_name and goal_target > 0:
@@ -1662,8 +1357,9 @@ elif page == "Savings Goals":
                     normalize_goal(
                         {
                             "name": goal_name,
-                            "category_name": goal_category or goal_name,
                             "target_amount": float(goal_target),
+                            "current_savings": float(goal_saved),
+                            "balance": float(goal_saved),
                             "deadline": goal_deadline,
                         },
                         fallback_monthly_savings=max(0.0, monthly_balance),
@@ -1678,13 +1374,8 @@ elif page == "Savings Goals":
     if st.session_state.goals:
         for idx, goal in enumerate(st.session_state.goals):
             normalized_goal = normalize_goal(goal, fallback_monthly_savings=max(0.0, profile_balance))
-            category_savings = [
-                saving["amount"]
-                for saving in list_recurring_savings()
-                if saving["category"] == normalized_goal["category_name"]
-            ]
-            total_saved = sum(category_savings)
-            average_monthly = total_saved if category_savings else 0.0
+            total_logged, average_monthly = goal_savings_summary(normalized_goal)
+            total_saved = normalized_goal["current_savings"] + total_logged
             progress = min(total_saved / normalized_goal["target_amount"], 1.0) if normalized_goal["target_amount"] > 0 else 0
             amount_left = max(0.0, normalized_goal["target_amount"] - total_saved)
             days_left = (normalized_goal["deadline"] - wib_now().date()).days
@@ -1704,14 +1395,91 @@ elif page == "Savings Goals":
             c4.metric("Ideal savings / month", format_idr(ideal_monthly))
             st.progress(progress, text=f"{progress * 100:.1f}% complete")
 
+            with st.form(f"goal_savings_form_{idx}", clear_on_submit=True):
+                st.markdown("**Monthly savings**")
+                history_col1, history_col2, history_col3 = st.columns(3)
+                with history_col1:
+                    logged_month = st.selectbox("Month", MONTHS, index=MONTH_INDEX[st.session_state.current_month], key=f"goal_saving_month_{idx}")
+                with history_col2:
+                    logged_year = st.number_input("Year", min_value=wib_now().year - 10, max_value=wib_now().year + 50, value=st.session_state.current_year, step=1, key=f"goal_saving_year_{idx}")
+                with history_col3:
+                    logged_amount = st.number_input("Amount (IDR)", min_value=0, step=1000, format="%d", key=f"goal_saving_amount_{idx}")
+                if st.form_submit_button("Add monthly saving", width="stretch"):
+                    normalized_goal["monthly_savings_history"] = [
+                        entry for entry in normalized_goal["monthly_savings_history"]
+                        if not (entry["month"] == logged_month and entry["year"] == int(logged_year))
+                    ]
+                    normalized_goal["monthly_savings_history"].append(
+                        {"month": logged_month, "year": int(logged_year), "amount": float(logged_amount)}
+                    )
+                    st.session_state.goals[idx] = normalized_goal
+                    save_goals(st.session_state.goals)
+                    st.rerun()
+
+            if normalized_goal["monthly_savings_history"]:
+                st.caption(f"Logged savings: {format_idr(total_logged)} total | {format_idr(average_monthly)} average per month")
+                st.markdown("**Savings history**")
+                history_entries = sorted(
+                    enumerate(normalized_goal["monthly_savings_history"]),
+                    key=lambda item: (item[1]["year"], MONTH_INDEX.get(item[1]["month"], 0)),
+                    reverse=True,
+                )
+                for history_index, entry in history_entries:
+                    with st.form(f"edit_monthly_saving_form_{idx}_{history_index}"):
+                        entry_col1, entry_col2, entry_col3, entry_col4 = st.columns([2, 1, 2, 1])
+                        with entry_col1:
+                            edited_month = st.selectbox(
+                                "Month",
+                                MONTHS,
+                                index=MONTH_INDEX.get(entry["month"], 0),
+                                key=f"history_month_{idx}_{history_index}",
+                            )
+                        with entry_col2:
+                            edited_year = st.number_input(
+                                "Year",
+                                min_value=wib_now().year - 10,
+                                max_value=wib_now().year + 50,
+                                value=int(entry["year"]),
+                                step=1,
+                                key=f"history_year_{idx}_{history_index}",
+                            )
+                        with entry_col3:
+                            edited_amount = st.number_input(
+                                "Amount (IDR)",
+                                min_value=0,
+                                value=int(entry["amount"]),
+                                step=1000,
+                                format="%d",
+                                key=f"history_amount_{idx}_{history_index}",
+                            )
+                        with entry_col4:
+                            save_entry = st.form_submit_button("Save", width="stretch")
+                            delete_entry = st.form_submit_button("Delete", width="stretch")
+
+                        if save_entry:
+                            normalized_goal["monthly_savings_history"][history_index] = {
+                                "month": edited_month,
+                                "year": int(edited_year),
+                                "amount": float(edited_amount),
+                            }
+                            st.session_state.goals[idx] = normalized_goal
+                            save_goals(st.session_state.goals)
+                            st.rerun()
+                        if delete_entry:
+                            normalized_goal["monthly_savings_history"].pop(history_index)
+                            st.session_state.goals[idx] = normalized_goal
+                            save_goals(st.session_state.goals)
+                            st.rerun()
+            else:
+                st.caption("No monthly savings logged yet.")
             if amount_left <= 0:
                 st.success("Goal reached.")
             elif projected_date:
                 track_label = "On track" if is_on_track else "Behind schedule"
                 st.write(f"Estimated completion: {projected_date.strftime('%B %Y')} | {track_label}")
-                st.caption(f"Projection uses your average saved amount of {format_idr(projected_monthly)} per month.")
+                st.caption(f"Projection uses your average logged saving of {format_idr(projected_monthly)} per month.")
             else:
-                st.warning("Completion date unavailable until you add a savings amount in the Savings page.")
+                st.warning("Completion date unavailable until you log a monthly saving amount.")
             if ideal_projected_date:
                 st.write(f"Ideal estimated completion: {ideal_projected_date.strftime('%B %Y')}")
 
@@ -1730,15 +1498,21 @@ elif page == "Savings Goals":
             if st.session_state.editing_goal == idx:
                 with st.form(f"edit_goal_form_{idx}"):
                     edited_name = st.text_input("Goal name", value=normalized_goal["name"])
-                    edited_category = st.text_input("Category name", value=normalized_goal["category_name"])
                     edit_col1, edit_col2 = st.columns(2)
                     with edit_col1:
                         edited_target = st.number_input(
                             "Target amount (IDR)",
                             min_value=0.0,
                             value=float(normalized_goal["target_amount"]),
-                            step=0.01,
-                            format="%.2f",
+                            step=1000.0,
+                            format="%.0f",
+                        )
+                        edited_saved = st.number_input(
+                            "Current saved amount (IDR)",
+                            min_value=0.0,
+                            value=float(normalized_goal["current_savings"]),
+                            step=1000.0,
+                            format="%.0f",
                         )
                     with edit_col2:
                         edited_deadline = st.date_input("Target deadline", value=normalized_goal["deadline"])
@@ -1754,8 +1528,9 @@ elif page == "Savings Goals":
                                 {
                                     **normalized_goal,
                                     "name": edited_name,
-                                    "category_name": edited_category or edited_name,
                                     "target_amount": float(edited_target),
+                                    "current_savings": float(edited_saved),
+                                    "balance": float(edited_saved),
                                     "deadline": edited_deadline,
                                 },
                                 fallback_monthly_savings=max(0.0, monthly_balance),
@@ -1776,76 +1551,64 @@ elif page == "Savings":
     st.subheader("Savings")
     st.write("Set aside a fixed amount each month before deciding what money is safe to use.")
 
-    recurring_savings = list_recurring_savings()
-    overall_savings = sum(saving["amount"] for saving in recurring_savings)
-    savings_col1, savings_col2, savings_col3, savings_col4 = st.columns(4)
+    savings_col1, savings_col2, savings_col3 = st.columns(3)
     savings_col1.metric("Profile balance", format_idr(profile_balance))
     savings_col2.metric("Saved this month", format_idr(monthly_savings_total))
-    savings_col3.metric("Overall savings", format_idr(overall_savings))
-    savings_col4.metric("Safe to use this month", format_idr(profile_balance - overall_savings))
+    savings_col3.metric("Safe to use this month", format_idr(safe_monthly_balance))
 
-    savings_by_month = {}
-    for saving in recurring_savings:
-        month_key = month_sort_key(saving["start_month"], saving["start_year"])
-        savings_by_month[month_key] = savings_by_month.get(month_key, 0.0) + saving["amount"]
     savings_history = []
-    running_savings = 0.0
-    for month_key in sorted(savings_by_month):
-        running_savings += savings_by_month[month_key]
-        month_name = MONTHS[month_key[1]]
+    recurring_savings = list_recurring_savings()
+    should_save_monthly = sum(goal_required_monthly(goal) for goal in st.session_state.goals)
+    for record in list_monthly_data():
+        record_month = record["month"]
+        record_year = int(record["year"])
+        actual_saved = sum(
+            saving["amount"]
+            for saving in recurring_savings
+            if saving_months_applied(saving, record_month, record_year) > 0
+        )
         savings_history.append(
             {
-                "month_key": month_key,
-                "month": f"{month_name[:3]} {month_key[0]}",
-                "Savings": running_savings,
+                "month_key": month_sort_key(record_month, record_year),
+                "month": f"{record_month[:3]} {record_year}",
+                "Saved": actual_saved,
+                "Should save": should_save_monthly,
             }
         )
+    savings_history.sort(key=lambda item: item["month_key"])
 
     st.markdown("---")
-    st.markdown("**Savings over time**")
-    st.caption("Cumulative savings across all selected saving months.")
-    if savings_history:
-        savings_chart_df = pd.DataFrame(savings_history)
-        savings_fig = px.line(
-            savings_chart_df,
-            x="month",
-            y="Savings",
-            markers=True,
-            labels={"month": "Month", "Savings": "Cumulative savings (IDR)"},
-            color_discrete_sequence=["#ef3340"],
-        )
-        savings_fig.update_layout(showlegend=False, hovermode="x unified")
-        st.plotly_chart(savings_fig, width="stretch")
-    else:
-        st.info("No savings entries yet.")
-
-    saving_categories = ["General"]
-    for goal in st.session_state.goals:
-        category_name = normalize_goal(goal)["category_name"]
-        if category_name not in saving_categories:
-            saving_categories.append(category_name)
+    st.markdown("**Saved vs. should save**")
+    st.caption("Should save is the monthly amount needed to reach all savings goals by their deadlines.")
+    savings_chart_df = pd.DataFrame(savings_history).melt(
+        id_vars=["month_key", "month"],
+        value_vars=["Saved", "Should save"],
+        var_name="Measure",
+        value_name="Amount",
+    )
+    savings_fig = px.line(
+        savings_chart_df,
+        x="month",
+        y="Amount",
+        color="Measure",
+        markers=True,
+        labels={"month": "Month", "Amount": "Amount (IDR)", "Measure": ""},
+        color_discrete_map={"Saved": "#ef3340", "Should save": "#f4f4f5"},
+    )
+    savings_fig.update_layout(legend_title_text="", hovermode="x unified")
+    st.plotly_chart(savings_fig, width="stretch")
 
     with st.form("add_saving_form", clear_on_submit=True):
         saving_name = st.text_input("Saving name", placeholder="Emergency fund, House deposit, Travel")
-        saving_category = st.selectbox("Category", saving_categories)
-        saving_amount = st.number_input("Monthly amount (IDR)", min_value=0.0, step=0.01, format="%.2f")
-        saving_start_month = st.selectbox("Saving month", MONTHS, index=MONTH_INDEX[st.session_state.current_month])
-        saving_start_year = st.number_input(
-            "Saving year",
-            min_value=wib_now().year - 10,
-            max_value=wib_now().year + 50,
-            value=st.session_state.current_year,
-            step=1,
-        )
+        saving_amount = st.number_input("Monthly amount (IDR)", min_value=0, step=1000, format="%d")
         if st.form_submit_button("Add saving", width="stretch"):
             if saving_name and saving_amount > 0:
                 save_recurring_saving(
                     {
                         "name": saving_name,
-                        "category": saving_category,
                         "amount": float(saving_amount),
-                        "start_month": saving_start_month,
-                        "start_year": int(saving_start_year),
+                        "start_month": st.session_state.current_month,
+                        "start_year": st.session_state.current_year,
                     }
                 )
                 st.toast(f"Added {saving_name}")
@@ -1861,7 +1624,7 @@ elif page == "Savings":
             with savings_item_col1:
                 st.write(saving["name"])
             with savings_item_col2:
-                st.write(f"{saving['category']} | {format_idr(saving['amount'])} from {saving['start_month']} {saving['start_year']}")
+                st.write(f"{format_idr(saving['amount'])} per month")
             with savings_item_col3:
                 if st.button("Delete", key=f"delete_saving_{saving['id']}", width="stretch"):
                     delete_recurring_saving(saving["id"])

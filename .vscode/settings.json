@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^python -m py_compile \"c:\\\\Users\\\\Admin\\\\Documents\\\\Budgetware\\\\app\\.py\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
