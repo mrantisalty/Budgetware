@@ -205,6 +205,40 @@ def format_idr(amount):
     return f"IDR {precise_amount:,.2f}"
 
 
+def normalize_category_list(values, defaults):
+    cleaned = []
+    for value in values or []:
+        text = str(value).strip()
+        if text and text not in cleaned:
+            cleaned.append(text)
+    return cleaned or list(defaults)
+
+
+def normalize_category_settings(settings):
+    if not isinstance(settings, dict):
+        settings = {}
+    return {
+        "income_categories": normalize_category_list(settings.get("income_categories"), INCOME_CATEGORIES),
+        "expense_categories": normalize_category_list(settings.get("expense_categories"), EXPENSE_CATEGORIES),
+    }
+
+
+def get_category_settings():
+    store = load_store()
+    return normalize_category_settings(store.get("category_settings"))
+
+
+def save_category_settings(income_categories, expense_categories):
+    store = load_store()
+    store["category_settings"] = normalize_category_settings(
+        {
+            "income_categories": income_categories,
+            "expense_categories": expense_categories,
+        }
+    )
+    save_store(store)
+
+
 def ensure_item_ids(items):
     normalized = []
     for item in items or []:
@@ -262,19 +296,21 @@ def normalize_saving(saving):
     }
 
 
-def normalize_daily_transaction(transaction):
+def normalize_daily_transaction(transaction, income_categories=None, expense_categories=None):
     if not isinstance(transaction, dict):
         transaction = {}
+    active_income_categories = normalize_category_list(income_categories, INCOME_CATEGORIES)
+    active_expense_categories = normalize_category_list(expense_categories, EXPENSE_CATEGORIES)
     income_amount = float(transaction.get("income", 0) or 0)
     expense_amount = float(transaction.get("expenses", 0) or 0)
-    category = transaction.get("category")
+    category = str(transaction.get("category") or "").strip()
     if not category:
         if income_amount > 0:
-            category = INCOME_CATEGORIES[0]
+            category = active_income_categories[0]
         elif expense_amount > 0:
-            category = EXPENSE_CATEGORIES[0]
+            category = active_expense_categories[0]
         else:
-            category = INCOME_CATEGORIES[0]
+            category = active_income_categories[0]
     return {
         "id": transaction.get("id") or uuid.uuid4().hex,
         "date": transaction.get("date") or wib_now().date().isoformat(),
@@ -293,6 +329,7 @@ def empty_store():
         "goals": [],
         "profile_balances": {"cash_balance": 0.0, "account_balance": 0.0},
         "recurring_savings": [],
+        "category_settings": normalize_category_settings({}),
     }
 
 
@@ -303,11 +340,13 @@ def load_store():
     with open(DATA_FILE, "r", encoding="utf-8") as file:
         store = empty_store()
         store.update(json.load(file))
+        store["category_settings"] = normalize_category_settings(store.get("category_settings"))
         return store
 
 
 def save_store(store):
     ensure_saves_folder()
+    store["category_settings"] = normalize_category_settings(store.get("category_settings"))
     with open(DATA_FILE, "w", encoding="utf-8") as file:
         json.dump(store, file, indent=2)
 
@@ -331,7 +370,15 @@ def migrate_database_to_store():
     if balance_row:
         store["profile_balances"] = {"cash_balance": balance_row[0], "account_balance": balance_row[1]}
     daily_rows = conn.execute("SELECT id, transaction_date, name, balance_type, income, expenses FROM daily_transactions ORDER BY transaction_date, id").fetchall()
-    store["daily_transactions"] = [normalize_daily_transaction({"id": row[0], "date": row[1], "name": row[2], "balance_type": row[3], "income": row[4], "expenses": row[5]}) for row in daily_rows]
+    category_settings = normalize_category_settings(store.get("category_settings"))
+    store["daily_transactions"] = [
+        normalize_daily_transaction(
+            {"id": row[0], "date": row[1], "name": row[2], "balance_type": row[3], "income": row[4], "expenses": row[5]},
+            income_categories=category_settings["income_categories"],
+            expense_categories=category_settings["expense_categories"],
+        )
+        for row in daily_rows
+    ]
     conn.close()
     save_store(store)
     os.remove(DB_PATH)
@@ -447,16 +494,29 @@ def load_profile_balances():
 
 
 def save_daily_transaction(transaction):
-    normalized = normalize_daily_transaction(transaction)
     store = load_store()
+    category_settings = normalize_category_settings(store.get("category_settings"))
+    normalized = normalize_daily_transaction(
+        transaction,
+        income_categories=category_settings["income_categories"],
+        expense_categories=category_settings["expense_categories"],
+    )
     store["daily_transactions"] = [item for item in store["daily_transactions"] if item.get("id") != normalized["id"]]
     store["daily_transactions"].append(normalized)
     save_store(store)
 
 
 def list_daily_transactions():
+    category_settings = get_category_settings()
     return sorted(
-        [normalize_daily_transaction(transaction) for transaction in load_store()["daily_transactions"]],
+        [
+            normalize_daily_transaction(
+                transaction,
+                income_categories=category_settings["income_categories"],
+                expense_categories=category_settings["expense_categories"],
+            )
+            for transaction in load_store()["daily_transactions"]
+        ],
         key=lambda transaction: (transaction["date"], transaction["id"]),
     )
 
@@ -549,8 +609,10 @@ def calculate_daily_transaction_totals(transactions):
 
 
 def category_totals_from_transactions(transactions):
-    income_totals = {category: 0.0 for category in INCOME_CATEGORIES}
-    expense_totals = {category: 0.0 for category in EXPENSE_CATEGORIES}
+    income_categories = list(st.session_state.get("income_categories") or INCOME_CATEGORIES)
+    expense_categories = list(st.session_state.get("expense_categories") or EXPENSE_CATEGORIES)
+    income_totals = {category: 0.0 for category in income_categories}
+    expense_totals = {category: 0.0 for category in expense_categories}
 
     for transaction in transactions or []:
         if not isinstance(transaction, dict):
@@ -558,13 +620,17 @@ def category_totals_from_transactions(transactions):
 
         income_amount = float(transaction.get("income", 0) or 0)
         expense_amount = float(transaction.get("expenses", 0) or 0)
-        category = transaction.get("category")
+        category = str(transaction.get("category") or "").strip()
 
         if income_amount > 0:
-            income_category = category if category in INCOME_CATEGORIES else INCOME_CATEGORIES[0]
+            if category and category not in income_totals:
+                income_totals[category] = 0.0
+            income_category = category if category in income_totals else income_categories[0]
             income_totals[income_category] += income_amount
         if expense_amount > 0:
-            expense_category = category if category in EXPENSE_CATEGORIES else EXPENSE_CATEGORIES[0]
+            if category and category not in expense_totals:
+                expense_totals[category] = 0.0
+            expense_category = category if category in expense_totals else expense_categories[0]
             expense_totals[expense_category] += expense_amount
 
     income_rows = [
@@ -716,6 +782,9 @@ def import_data(filepath):
         save_store(store)
         st.session_state.goals = load_goals()
         st.session_state.cash_balance, st.session_state.account_balance = load_profile_balances()
+        imported_category_settings = get_category_settings()
+        st.session_state.income_categories = imported_category_settings["income_categories"]
+        st.session_state.expense_categories = imported_category_settings["expense_categories"]
 
         return True, "Data imported successfully."
     except Exception as exc:
@@ -732,6 +801,10 @@ if "current_year" not in st.session_state:
     st.session_state.current_year = today.year
 if "goals" not in st.session_state:
     st.session_state.goals = load_goals()
+if "income_categories" not in st.session_state or "expense_categories" not in st.session_state:
+    initial_category_settings = get_category_settings()
+    st.session_state.income_categories = initial_category_settings["income_categories"]
+    st.session_state.expense_categories = initial_category_settings["expense_categories"]
 if "cash_balance" not in st.session_state or "account_balance" not in st.session_state:
     stored_balances = load_profile_balances()
     if stored_balances is None:
@@ -891,6 +964,45 @@ with st.container():
                     st.error(f"Failed to delete file: {exc}")
 
     st.markdown("---")
+    st.markdown("**Categories**")
+    category_scope = st.selectbox("Category type", ["Income", "Expense"], key="category_scope")
+    active_categories = st.session_state.income_categories if category_scope == "Income" else st.session_state.expense_categories
+    st.caption("Current: " + ", ".join(active_categories))
+
+    new_category_name = st.text_input("Add category", placeholder="Type a new category name", key="new_category_name")
+    if st.button("Add category", width="stretch"):
+        normalized_name = new_category_name.strip()
+        if not normalized_name:
+            st.error("Category name cannot be empty.")
+        elif normalized_name.lower() in {category.lower() for category in active_categories}:
+            st.error("That category already exists.")
+        else:
+            if category_scope == "Income":
+                st.session_state.income_categories = active_categories + [normalized_name]
+            else:
+                st.session_state.expense_categories = active_categories + [normalized_name]
+            save_category_settings(st.session_state.income_categories, st.session_state.expense_categories)
+            st.success(f"Added {normalized_name}")
+            st.rerun()
+
+    removable_category = st.selectbox("Remove category", active_categories, key="remove_category_name")
+    if st.button("Remove category", width="stretch"):
+        if len(active_categories) <= 1:
+            st.error("Keep at least one category in each type.")
+        else:
+            if category_scope == "Income":
+                st.session_state.income_categories = [
+                    category for category in st.session_state.income_categories if category != removable_category
+                ]
+            else:
+                st.session_state.expense_categories = [
+                    category for category in st.session_state.expense_categories if category != removable_category
+                ]
+            save_category_settings(st.session_state.income_categories, st.session_state.expense_categories)
+            st.success(f"Removed {removable_category}")
+            st.rerun()
+
+    st.markdown("---")
     st.markdown("**Danger zone**")
     wipe_confirmed = st.checkbox("I understand this permanently deletes all app data", key="wipe_confirmed")
     if st.button("Wipe all app data", width="stretch"):
@@ -901,6 +1013,9 @@ with st.container():
             st.session_state.current_income_items = []
             st.session_state.current_expense_items = []
             st.session_state.goals = []
+            default_category_settings = get_category_settings()
+            st.session_state.income_categories = default_category_settings["income_categories"]
+            st.session_state.expense_categories = default_category_settings["expense_categories"]
             st.session_state.cash_balance = 0.0
             st.session_state.account_balance = 0.0
             st.session_state.editing_goal = None
@@ -1414,14 +1529,15 @@ elif page == "Daily":
         daily_name = st.text_input("Name", placeholder="Salary, groceries, transport")
         daily_balance_type = st.selectbox("Account type", ["Account balance", "Cash balance"])
         daily_entry_type = st.selectbox("Type", ["Income", "Expense"])
-        daily_category_options = INCOME_CATEGORIES if daily_entry_type == "Income" else EXPENSE_CATEGORIES
-        daily_category = st.selectbox("Category", daily_category_options)
+        daily_income_category = st.selectbox("Income category", st.session_state.income_categories)
+        daily_expense_category = st.selectbox("Expense category", st.session_state.expense_categories)
         daily_income = st.number_input("Income (IDR)", min_value=0.0, step=0.01, format="%.2f")
         daily_expenses = st.number_input("Expenses (IDR)", min_value=0.0, step=0.01, format="%.2f")
         if st.form_submit_button("Add transaction", width="stretch"):
             if daily_name and (daily_income > 0 or daily_expenses > 0):
                 effective_income = daily_income if daily_entry_type == "Income" else 0.0
                 effective_expenses = daily_expenses if daily_entry_type == "Expense" else 0.0
+                daily_category = daily_income_category if daily_entry_type == "Income" else daily_expense_category
                 transaction = normalize_daily_transaction(
                     {
                         "date": selected_daily_date.isoformat(),
@@ -1475,18 +1591,31 @@ elif page == "Daily":
             edit_name = st.text_input("Name", value=selected_daily_edit["name"])
             edit_balance_type = st.selectbox("Account type", ["Account balance", "Cash balance"], index=["Account balance", "Cash balance"].index(selected_daily_edit.get("balance_type", "Account balance")))
             edit_entry_type = st.selectbox("Type", ["Income", "Expense"], index=0 if selected_daily_edit["income"] > 0 else 1)
-            edit_category_options = INCOME_CATEGORIES if edit_entry_type == "Income" else EXPENSE_CATEGORIES
-            edit_category = st.selectbox("Category", edit_category_options, index=edit_category_options.index(selected_daily_edit.get("category", edit_category_options[0])))
+            current_edit_category = selected_daily_edit.get("category", "")
+
+            income_edit_options = list(st.session_state.income_categories)
+            if current_edit_category and current_edit_category not in income_edit_options:
+                income_edit_options.append(current_edit_category)
+            income_default_index = income_edit_options.index(current_edit_category) if current_edit_category in income_edit_options else 0
+            edit_income_category = st.selectbox("Income category", income_edit_options, index=income_default_index)
+
+            expense_edit_options = list(st.session_state.expense_categories)
+            if current_edit_category and current_edit_category not in expense_edit_options:
+                expense_edit_options.append(current_edit_category)
+            expense_default_index = expense_edit_options.index(current_edit_category) if current_edit_category in expense_edit_options else 0
+            edit_expense_category = st.selectbox("Expense category", expense_edit_options, index=expense_default_index)
+
             edit_income = st.number_input("Income (IDR)", min_value=0.0, value=float(selected_daily_edit["income"]), step=0.01, format="%.2f")
             edit_expenses = st.number_input("Expenses (IDR)", min_value=0.0, value=float(selected_daily_edit["expenses"]), step=0.01, format="%.2f")
             if st.form_submit_button("Save changes", width="stretch"):
+                updated_category = edit_income_category if edit_entry_type == "Income" else edit_expense_category
                 updated = normalize_daily_transaction(
                     {
                         "id": selected_daily_edit["id"],
                         "date": edit_date.isoformat(),
                         "name": edit_name,
                         "balance_type": edit_balance_type,
-                        "category": edit_category,
+                        "category": updated_category,
                         "income": edit_income if edit_entry_type == "Income" else 0.0,
                         "expenses": edit_expenses if edit_entry_type == "Expense" else 0.0,
                     }
