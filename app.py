@@ -888,16 +888,20 @@ with st.container():
 
     st.markdown("---")
     st.markdown("**Danger zone**")
+    wipe_confirmed = st.checkbox("I understand this permanently deletes all app data", key="wipe_confirmed")
     if st.button("Wipe all app data", width="stretch"):
-        save_store(empty_store())
-        st.session_state.current_income_items = []
-        st.session_state.current_expense_items = []
-        st.session_state.goals = []
-        st.session_state.cash_balance = 0.0
-        st.session_state.account_balance = 0.0
-        st.session_state.editing_goal = None
-        st.success("All data wiped. You now have a clean slate.")
-        st.rerun()
+        if not wipe_confirmed:
+            st.error("Please confirm deletion first.")
+        else:
+            save_store(empty_store())
+            st.session_state.current_income_items = []
+            st.session_state.current_expense_items = []
+            st.session_state.goals = []
+            st.session_state.cash_balance = 0.0
+            st.session_state.account_balance = 0.0
+            st.session_state.editing_goal = None
+            st.success("All data wiped. You now have a clean slate.")
+            st.rerun()
 
 st.markdown("---")
 
