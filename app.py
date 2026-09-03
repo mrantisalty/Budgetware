@@ -886,6 +886,19 @@ with st.container():
                 except OSError as exc:
                     st.error(f"Failed to delete file: {exc}")
 
+    st.markdown("---")
+    st.markdown("**Danger zone**")
+    if st.button("Wipe all app data", width="stretch"):
+        save_store(empty_store())
+        st.session_state.current_income_items = []
+        st.session_state.current_expense_items = []
+        st.session_state.goals = []
+        st.session_state.cash_balance = 0.0
+        st.session_state.account_balance = 0.0
+        st.session_state.editing_goal = None
+        st.success("All data wiped. You now have a clean slate.")
+        st.rerun()
+
 st.markdown("---")
 
 # LOAD DATA
