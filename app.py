@@ -176,6 +176,16 @@ MONTHS = [
 ]
 INCOME_CATEGORIES = ["Salary", "Gift", "Side salary"]
 EXPENSE_CATEGORIES = ["Necessity", "Wants", "Needs"]
+TAB_TOOLTIPS = {
+    "Overview": "Big-picture dashboard across balances, trends, and category breakdowns.",
+    "Daily": "Track, edit, and review transactions for a specific day.",
+    "Monthly": "See totals and category insights for the selected month.",
+    "Yearly": "Review income, expenses, and category distribution for the selected year.",
+    "Lifetime": "Project long-term balance growth and view all-time category breakdowns.",
+    "Savings Goals": "Manage goals, track progress, and compare your pace against your target date.",
+    "Savings": "Set recurring savings categories that reduce your safe-to-use balance.",
+    "Legacy Monthly": "Old monthly-entry mode kept for compatibility with earlier records.",
+}
 MONTH_INDEX = {name: idx for idx, name in enumerate(MONTHS)}
 DB_PATH = "budgetware_data.db"
 SAVES_FOLDER = "saves"
@@ -603,6 +613,12 @@ def render_category_breakdown_charts(transactions, scope_label):
             st.info(f"No {scope_label.lower()} expense categories yet.")
 
 
+def render_tab_tooltip(page_name):
+    description = TAB_TOOLTIPS.get(page_name)
+    if description:
+        st.info(f"{page_name}: {description}")
+
+
 def month_sort_key(month_name, year):
     return (int(year), MONTH_INDEX.get(month_name, 0))
 
@@ -901,6 +917,7 @@ save_monthly_data(
 
 # PAGE CONTENT
 page = st.session_state.current_page
+render_tab_tooltip(page)
 
 if page == "Overview":
     st.subheader("Overview")
@@ -959,7 +976,7 @@ if page == "Overview":
     monthly_summary = {}
     for transaction in daily_transactions:
         transaction_date = datetime.fromisoformat(transaction["date"])
-        month_key = (transaction_date.year, transaction_date.month)
+        month_key = (transaction_date.year, transaction_date.month - 1)
         summary = monthly_summary.setdefault(
             month_key,
             {"year": transaction_date.year, "month_index": transaction_date.month - 1, "Income": 0.0, "Expenses": 0.0},
