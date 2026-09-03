@@ -1,0 +1,9 @@
+# Local app data (do not publish personal finance records)
+saves/*.json
+
+# Optional local database artifacts
+*.db
+
+# Python cache
+__pycache__/
+*.py[cod]
