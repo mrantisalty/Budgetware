@@ -853,6 +853,10 @@ with st.container():
             success, message = import_data(tmp_path)
             os.remove(tmp_path)
             if success:
+                reloaded_month = load_monthly_data(st.session_state.current_month, st.session_state.current_year)
+                st.session_state.current_income_items = ensure_item_ids(reloaded_month.get("income_items", []))
+                st.session_state.current_expense_items = ensure_item_ids(reloaded_month.get("expense_items", []))
+                st.session_state.pop("import_backup", None)
                 st.success(message)
                 st.rerun()
             else:
